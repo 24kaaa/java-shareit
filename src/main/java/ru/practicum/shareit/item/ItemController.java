@@ -55,6 +55,9 @@ public class ItemController {
 
     @GetMapping("/search")
     public List<ItemDto> search(@RequestParam String text) {
+        if (text == null || text.isBlank()) {
+            return List.of();
+        }
         return itemService.search(text).stream()
                 .map(ItemMapper::toDto)
                 .collect(Collectors.toList());
