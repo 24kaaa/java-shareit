@@ -9,7 +9,7 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 @NoArgsConstructor
 public class UserDto {
-    private int id;
+    private Long id;
 
     @Size(max = 255, message = "Имя слишком длинное")
     private String name;

@@ -12,7 +12,7 @@ import ru.practicum.shareit.request.dto.ItemRequestDto;
 @AllArgsConstructor
 @NoArgsConstructor
 public class ItemDto {
-    private int id;
+    private Long id;
 
     @NotBlank(message = "Название не может быть пустым")
     @Size(max = 255, message = "Название слишком длинное")
