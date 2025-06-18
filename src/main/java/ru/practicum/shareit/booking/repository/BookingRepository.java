@@ -52,4 +52,10 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
             "AND b.status = 'APPROVED' " +
             "ORDER BY b.start ASC")
     List<Booking> findApprovedBookingsForItem(@Param("itemId") Long itemId);
+
+    @Query("SELECT b FROM Booking b " +
+            "JOIN FETCH b.booker " +
+            "WHERE b.item.owner.id = :ownerId " +
+            "AND b.status = 'APPROVED'")
+    List<Booking> findAllApprovedBookingsByOwnerId(@Param("ownerId") Long ownerId);
 }

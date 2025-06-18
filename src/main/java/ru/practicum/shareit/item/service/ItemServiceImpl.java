@@ -1,8 +1,8 @@
 package ru.practicum.shareit.item.service;
 
-import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import ru.practicum.shareit.booking.Booking;
 import ru.practicum.shareit.booking.dto.BookingShortDto;
 import ru.practicum.shareit.booking.repository.BookingRepository;
@@ -25,6 +25,7 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+@Transactional(readOnly = true)
 public class ItemServiceImpl implements ItemService {
     private final ItemRepository itemRepository;
     private final UserRepository userRepository;
@@ -32,6 +33,7 @@ public class ItemServiceImpl implements ItemService {
     private final CommentRepository commentRepository;
 
     @Override
+    @Transactional
     public Item create(Item item, Long ownerId) {
         User owner = userRepository.findById(ownerId)
                 .orElseThrow(() -> new NotFoundException("Владелец с id=" + ownerId + " не найден"));
@@ -45,6 +47,7 @@ public class ItemServiceImpl implements ItemService {
     }
 
     @Override
+    @Transactional
     public Item update(Long itemId, Item updateData, Long ownerId) {
         Item existingItem = getById(itemId);
 
@@ -66,17 +69,20 @@ public class ItemServiceImpl implements ItemService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public Item getById(Long itemId) {
         return itemRepository.findById(itemId)
                 .orElseThrow(() -> new NotFoundException("Вещь с id=" + itemId + " не найдена"));
     }
 
     @Override
+    @Transactional(readOnly = true)
     public List<Item> getAllByOwner(Long ownerId) {
         return itemRepository.findByOwnerId(ownerId);
     }
 
     @Override
+    @Transactional
     public List<Item> search(String text) {
         if (text == null || text.isBlank()) {
             return List.of();
@@ -85,40 +91,41 @@ public class ItemServiceImpl implements ItemService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public List<ItemWithBookingsDto> getAllItemsByOwner(Long userId) {
         userRepository.findById(userId)
                 .orElseThrow(() -> new NotFoundException("Пользователь не найден"));
 
         List<Item> items = itemRepository.findByOwnerId(userId);
+        List<Long> itemIds = items.stream().map(Item::getId).collect(Collectors.toList());
+
+        List<Booking> allBookings = bookingRepository.findAllApprovedBookingsByOwnerId(userId);
+        Map<Long, List<Booking>> bookingsByItemId = allBookings.stream()
+                .collect(Collectors.groupingBy(b -> b.getItem().getId()));
+
+        List<Comment> allComments = commentRepository.findAllByItemIds(itemIds);
+        Map<Long, List<Comment>> commentsByItemId = allComments.stream()
+                .collect(Collectors.groupingBy(c -> c.getItem().getId()));
+
         LocalDateTime now = LocalDateTime.now();
 
         return items.stream()
                 .map(item -> {
-                    List<Booking> bookings = bookingRepository.findApprovedBookingsForItem(item.getId());
+                    List<Booking> itemBookings = bookingsByItemId.getOrDefault(item.getId(), List.of());
 
-                    BookingShortDto lastBooking = bookings.stream()
+                    BookingShortDto lastBooking = itemBookings.stream()
                             .filter(b -> b.getEnd().isBefore(now))
                             .max(Comparator.comparing(Booking::getEnd))
-                            .map(booking -> BookingShortDto.builder()
-                                    .id(booking.getId())
-                                    .bookerId(booking.getBooker().getId())
-                                    .start(booking.getStart())
-                                    .end(booking.getEnd())
-                                    .build())
+                            .map(this::toBookingShortDto)
                             .orElse(null);
 
-                    BookingShortDto nextBooking = bookings.stream()
+                    BookingShortDto nextBooking = itemBookings.stream()
                             .filter(b -> b.getStart().isAfter(now))
                             .min(Comparator.comparing(Booking::getStart))
-                            .map(booking -> BookingShortDto.builder()
-                                    .id(booking.getId())
-                                    .bookerId(booking.getBooker().getId())
-                                    .start(booking.getStart())
-                                    .end(booking.getEnd())
-                                    .build())
+                            .map(this::toBookingShortDto)
                             .orElse(null);
 
-                    List<CommentDto> comments = commentRepository.findByItemId(item.getId()).stream()
+                    List<CommentDto> comments = commentsByItemId.getOrDefault(item.getId(), List.of()).stream()
                             .map(CommentMapper::toDto)
                             .collect(Collectors.toList());
 
@@ -133,6 +140,15 @@ public class ItemServiceImpl implements ItemService {
                             .build();
                 })
                 .collect(Collectors.toList());
+    }
+
+    private BookingShortDto toBookingShortDto(Booking booking) {
+        return BookingShortDto.builder()
+                .id(booking.getId())
+                .bookerId(booking.getBooker().getId())
+                .start(booking.getStart())
+                .end(booking.getEnd())
+                .build();
     }
 
     @Transactional
@@ -165,6 +181,7 @@ public class ItemServiceImpl implements ItemService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public ItemWithBookingsDto getItemWithBookings(Long itemId, Long userId) {
         Item item = getById(itemId);
         List<CommentDto> comments = getCommentsForItem(itemId);
