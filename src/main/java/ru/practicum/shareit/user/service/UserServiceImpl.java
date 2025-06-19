@@ -1,64 +1,62 @@
 package ru.practicum.shareit.user.service;
 
-import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import ru.practicum.shareit.exception.ConflictException;
-import ru.practicum.shareit.exception.InternalServerException;
 import ru.practicum.shareit.exception.NotFoundException;
 import ru.practicum.shareit.user.User;
+import ru.practicum.shareit.user.repository.UserRepository;
 
 import java.util.*;
 
 @Service
+@RequiredArgsConstructor
+@Transactional(readOnly = true)
 public class UserServiceImpl implements UserService {
-    private final Map<Integer, User> users = new HashMap<>();
-    private final Map<String, User> emailToUser = new HashMap<>();
-    private int idCounter = 1;
+    private final UserRepository userRepository;
 
     @Override
+    @Transactional
     public User create(User user) {
-            if (emailToUser.containsKey(user.getEmail())) {
-                throw new ConflictException("Email " + user.getEmail() + " используется");
-            }
-
-            if (user.getEmail() == null) {
-                throw new InternalServerException("Опа");
-            }
-
-            user.setId(idCounter++);
-            users.put(user.getId(), user);
-            emailToUser.put(user.getEmail(), user);
-            return user;
-    }
-
-    @Override
-    public User update(int userId,@Valid User user) {
-        if (!users.containsKey(userId)) {
-            throw new NotFoundException("Пользователь не найден");
+        if (userRepository.existsByEmail(user.getEmail())) {
+            throw new ConflictException("Пользователь с email " + user.getEmail() + " уже существует");
         }
+        return userRepository.save(user);
+    }
 
-        if (user.getEmail() != null && emailToUser.containsKey(user.getEmail())) {
-            throw new ConflictException("Email " + user.getEmail() + " используется");
+    @Override
+    @Transactional
+    public User update(Long userId, User user) {
+        User existingUser = getById(userId);
+        if (user.getName() != null) {
+            existingUser.setName(user.getName());
         }
-
-        user.setId(userId);
-        users.put(userId, user);
-        return user;
+        if (user.getEmail() != null && !user.getEmail().equals(existingUser.getEmail())) {
+            if (userRepository.existsByEmail(user.getEmail())) {
+                throw new ConflictException("Email " + user.getEmail() + " уже используется");
+            }
+            existingUser.setEmail(user.getEmail());
+        }
+        return userRepository.save(existingUser);
     }
 
     @Override
-    public User getById(int userId) throws NotFoundException {
-        return Optional.ofNullable(users.get(userId))
-                .orElseThrow(() -> new NotFoundException("Пользователь не найден"));
+    @Transactional(readOnly = true)
+    public User getById(Long userId) {
+        return userRepository.findById(userId)
+                .orElseThrow(() -> new NotFoundException("Пользователь с id=" + userId + " не найден"));
     }
 
     @Override
+    @Transactional(readOnly = true)
     public List<User> getAll() {
-        return new ArrayList<>(users.values());
+        return userRepository.findAll();
     }
 
     @Override
-    public void delete(int userId) {
-        users.remove(userId);
+    @Transactional
+    public void delete(Long userId) {
+        userRepository.deleteById(userId);
     }
 }
